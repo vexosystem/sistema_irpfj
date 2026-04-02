@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isOwner() {
+      return request.auth != null;
+    }
+
+    match /clients/{clientId}/annualRecords/{recordId}/documents/{fileName} {
+      allow read, delete: if isOwner();
+      allow write: if isOwner()
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|image/jpeg|image/png');
+    }
+  }
+}

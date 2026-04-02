@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "owner";
+    }
+
+    function creatingSelfUser() {
+      return request.resource.data.role == "owner"
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.isActive == true;
+    }
+
+    function validClientWrite() {
+      return request.resource.data.cpfDigits is string
+        && request.resource.data.cpfDigits.size() == 11
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validAnnualRecordWrite() {
+      return request.resource.data.year is int
+        && (!("govCredentialRef" in request.resource.data) || request.resource.data.govCredentialRef == resource.data.govCredentialRef)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner();
+      allow create: if isAuthenticated() && request.auth.uid == uid && creatingSelfUser();
+      allow update: if isOwner() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /clients/{clientId} {
+      allow read: if isOwner();
+      allow create, update: if isOwner() && validClientWrite();
+      allow delete: if false;
+
+      match /annualRecords/{recordId} {
+        allow read: if isOwner();
+        allow create, update: if isOwner() && validAnnualRecordWrite();
+        allow delete: if false;
+
+        match /documents/{docId} {
+          allow read: if isOwner();
+          allow create: if isOwner()
+            && request.resource.data.uploadedBy == request.auth.uid;
+          allow update: if false;
+          allow delete: if isOwner();
+        }
+      }
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /credentialAccessLogs/{logId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /govCredentials/{credentialId} {
+      allow read, write: if false;
+    }
+  }
+}
