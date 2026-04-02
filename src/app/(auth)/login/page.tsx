@@ -6,10 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { loginSchema, type LoginFormValues } from "@/lib/validators/auth";
 import { signInWithEmail } from "@/lib/auth/auth-client";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
+import { LoadingButton } from "@/components/ui/LoadingButton";
+import { getFirebaseErrorMessage } from "@/lib/utils/firebase-error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,8 +30,7 @@ export default function LoginPage() {
       await signInWithEmail(values.email, values.password);
       router.push("/dashboard");
     } catch (submitError) {
-      setError("Nao foi possivel realizar o login.");
-      console.error(submitError);
+      setError(getFirebaseErrorMessage(submitError, "Nao foi possivel realizar o login."));
     }
   });
 
@@ -53,9 +53,9 @@ export default function LoginPage() {
 
           {error ? <p className="text-sm text-danger">{error}</p> : null}
 
-          <Button className="w-full" disabled={isSubmitting} type="submit">
+          <LoadingButton className="w-full" loading={isSubmitting} loadingText="Entrando..." type="submit">
             Entrar
-          </Button>
+          </LoadingButton>
         </form>
       </Card>
     </main>

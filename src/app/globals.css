@@ -1,17 +1,68 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --background: 8 15 31;
+  --foreground: 233 239 255;
+  --surface: 17 24 39;
+  --surface-strong: 11 18 32;
+  --border: 51 65 85;
+  --primary: 56 189 248;
+  --secondary: 148 163 184;
+  --muted: 148 163 184;
+  --success: 74 222 128;
+  --warning: 251 191 36;
+  --danger: 248 113 113;
+}
+
+.light {
+  color-scheme: light;
+  --background: 241 245 249;
+  --foreground: 15 23 42;
+  --surface: 255 255 255;
+  --surface-strong: 248 250 252;
+  --border: 203 213 225;
+  --primary: 14 116 144;
+  --secondary: 51 65 85;
+  --muted: 100 116 139;
+  --success: 21 128 61;
+  --warning: 180 83 9;
+  --danger: 185 28 28;
+}
 
 html,
 body {
   min-height: 100%;
 }
 
+html {
+  background-color: rgb(var(--background));
+}
+
 body {
-  background: #f4f4f5;
-  color: #18181b;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.1), transparent 22%),
+    rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family: "Plus Jakarta Sans", sans-serif;
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
 }
 
 * {
   box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.32);
 }

@@ -1,50 +1,40 @@
 import {
   collection,
-  collectionGroup,
   doc,
-  getCountFromServer,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
-import { Client, ClientFormValues } from "@/types/client";
+import { HttpsCallableResult, httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
+import { getFirebaseErrorMessage } from "@/lib/utils/firebase-error";
 import { toISOString } from "@/lib/utils/firestore";
 import { onlyDigits } from "@/lib/utils/format";
+import { Client, ClientFormValues } from "@/types/client";
+
+type DeleteClientPayload = {
+  clientId: string;
+};
+
+type DeleteClientResponse = {
+  deleted: boolean;
+};
 
 function clientsCollection() {
   return collection(db, "clients");
 }
 
-export async function listClients() {
-  const snapshot = await getDocs(query(clientsCollection(), orderBy("fullName")));
-  return snapshot.docs.map<Client>((item) => ({
-    id: item.id,
-    fullName: item.get("fullName") as string,
-    cpf: item.get("cpf") as string,
-    cpfDigits: item.get("cpfDigits") as string,
-    email: item.get("email") as string,
-    phone: item.get("phone") as string,
-    secondaryPhone: item.get("secondaryPhone") as string,
-    isActive: item.get("isActive") as boolean,
-    notesGeneral: item.get("notesGeneral") as string,
-    createdBy: item.get("createdBy") as string,
-    updatedBy: item.get("updatedBy") as string,
-    createdAt: toISOString(item.get("createdAt")),
-    updatedAt: toISOString(item.get("updatedAt")),
-  }));
+function annualRecordsCollection(clientId: string) {
+  return collection(db, "clients", clientId, "annualRecords");
 }
 
-export async function getClient(clientId: string) {
-  const snapshot = await getDoc(doc(db, "clients", clientId));
-  if (!snapshot.exists()) {
-    return null;
-  }
-
+function mapClient(snapshot: Awaited<ReturnType<typeof getDoc>>) {
   return {
     id: snapshot.id,
     fullName: snapshot.get("fullName") as string,
@@ -62,72 +52,141 @@ export async function getClient(clientId: string) {
   } satisfies Client;
 }
 
-export async function getDashboardTotals() {
-  const totalClients = await getCountFromServer(clientsCollection());
-  const annualRecordsSnapshot = await getDocs(query(collectionGroup(db, "annualRecords")));
-
-  const totals = annualRecordsSnapshot.docs.reduce(
-    (accumulator, item) => {
-      if (item.get("status") !== "finalizado") {
-        accumulator.pending += 1;
-      }
-      if (item.get("servicePaid")) {
-        accumulator.paid += 1;
-      } else {
-        accumulator.unpaid += 1;
-      }
-      return accumulator;
-    },
-    { pending: 0, paid: 0, unpaid: 0 },
+async function callDeleteClient(
+  payload: DeleteClientPayload,
+): Promise<HttpsCallableResult<DeleteClientResponse>> {
+  const deleteClientCallable = httpsCallable<DeleteClientPayload, DeleteClientResponse>(
+    functions,
+    "deleteClient",
   );
 
-  return {
-    totalClients: totalClients.data().count,
-    ...totals,
-  };
+  return deleteClientCallable(payload);
+}
+
+export async function listClients() {
+  try {
+    const snapshot = await getDocs(query(clientsCollection(), orderBy("fullName")));
+    return snapshot.docs.map<Client>((item) => mapClient(item));
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel listar os clientes."));
+  }
+}
+
+export async function getClient(clientId: string) {
+  try {
+    const snapshot = await getDoc(doc(db, "clients", clientId));
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return mapClient(snapshot);
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel carregar o cliente."));
+  }
+}
+
+export async function getDashboardTotals() {
+  try {
+    const clientsSnapshot = await getDocs(clientsCollection());
+
+    let pending = 0;
+    let paid = 0;
+    let unpaid = 0;
+
+    for (const clientDoc of clientsSnapshot.docs) {
+      const annualRecordsSnapshot = await getDocs(annualRecordsCollection(clientDoc.id));
+
+      annualRecordsSnapshot.forEach((record) => {
+        if (record.get("status") !== "finalizado") {
+          pending += 1;
+        }
+
+        if (record.get("servicePaid") === true) {
+          paid += 1;
+        } else {
+          unpaid += 1;
+        }
+      });
+    }
+
+    return {
+      totalClients: clientsSnapshot.size,
+      pending,
+      paid,
+      unpaid,
+    };
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel carregar o dashboard."));
+  }
 }
 
 export async function createClient(values: ClientFormValues, actorUid: string) {
-  const existingClients = await getDocs(query(clientsCollection()));
-  const cpfDigits = onlyDigits(values.cpf);
-  const duplicate = existingClients.docs.find((item) => item.get("cpfDigits") === cpfDigits);
+  try {
+    const cpfDigits = onlyDigits(values.cpf);
+    const duplicateSnapshot = await getDocs(
+      query(clientsCollection(), where("cpfDigits", "==", cpfDigits), limit(1)),
+    );
 
-  if (duplicate) {
-    throw new Error("CPF ja cadastrado.");
+    if (!duplicateSnapshot.empty) {
+      throw new Error("CPF ja cadastrado.");
+    }
+
+    const ref = doc(clientsCollection());
+
+    await setDoc(ref, {
+      fullName: values.fullName,
+      cpf: cpfDigits,
+      cpfDigits,
+      email: values.email,
+      phone: values.phone,
+      secondaryPhone: values.secondaryPhone,
+      isActive: values.isActive,
+      notesGeneral: values.notesGeneral,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: actorUid,
+      updatedBy: actorUid,
+    });
+
+    return ref.id;
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel criar o cliente."));
   }
-
-  const ref = doc(clientsCollection());
-
-  await setDoc(ref, {
-    fullName: values.fullName,
-    cpf: cpfDigits,
-    cpfDigits,
-    email: values.email,
-    phone: values.phone,
-    secondaryPhone: values.secondaryPhone,
-    isActive: values.isActive,
-    notesGeneral: values.notesGeneral,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdBy: actorUid,
-    updatedBy: actorUid,
-  });
-
-  return ref.id;
 }
 
 export async function updateClient(clientId: string, values: ClientFormValues, actorUid: string) {
-  const cpfDigits = onlyDigits(values.cpf);
-  await updateDoc(doc(db, "clients", clientId), {
-    fullName: values.fullName,
-    cpf: cpfDigits,
-    cpfDigits,
-    email: values.email,
-    phone: values.phone,
-    secondaryPhone: values.secondaryPhone,
-    isActive: values.isActive,
-    notesGeneral: values.notesGeneral,
-    updatedAt: serverTimestamp(),
-    updatedBy: actorUid,
-  });
+  try {
+    const cpfDigits = onlyDigits(values.cpf);
+    const duplicateSnapshot = await getDocs(
+      query(clientsCollection(), where("cpfDigits", "==", cpfDigits), limit(2)),
+    );
+
+    const duplicate = duplicateSnapshot.docs.find((item) => item.id !== clientId);
+    if (duplicate) {
+      throw new Error("CPF ja cadastrado.");
+    }
+
+    await updateDoc(doc(db, "clients", clientId), {
+      fullName: values.fullName,
+      cpf: cpfDigits,
+      cpfDigits,
+      email: values.email,
+      phone: values.phone,
+      secondaryPhone: values.secondaryPhone,
+      isActive: values.isActive,
+      notesGeneral: values.notesGeneral,
+      updatedAt: serverTimestamp(),
+      updatedBy: actorUid,
+    });
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel atualizar o cliente."));
+  }
+}
+
+export async function deleteClient(clientId: string) {
+  try {
+    await callDeleteClient({ clientId });
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel excluir o cliente."));
+  }
 }

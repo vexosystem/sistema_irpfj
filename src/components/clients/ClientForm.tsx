@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/Card";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
+import { LoadingButton } from "@/components/ui/LoadingButton";
 import { Textarea } from "@/components/ui/Textarea";
 import { formatCpf, onlyDigits } from "@/lib/utils/format";
 
@@ -48,6 +49,7 @@ export function ClientForm({ client }: ClientFormProps) {
 
   const onSubmit = handleSubmit(async (values) => {
     if (!user) {
+      setError("Sua sessao expirou. Entre novamente.");
       return;
     }
 
@@ -72,56 +74,74 @@ export function ClientForm({ client }: ClientFormProps) {
   });
 
   return (
-    <Card className="space-y-4">
-      <form className="space-y-4" onSubmit={onSubmit}>
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField label="Nome completo" error={errors.fullName?.message}>
-            <Input {...register("fullName")} />
+    <div className="space-y-6">
+      <Card className="space-y-2">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Cadastro</p>
+        <h2 className="text-2xl font-bold text-foreground">{client ? "Editar cliente" : "Novo cliente"}</h2>
+        <p className="text-sm text-muted">
+          Centralize o perfil fiscal e os dados de contato antes de lancar os exercicios anuais.
+        </p>
+      </Card>
+
+      <Card className="space-y-5">
+        <form className="space-y-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="Nome completo" error={errors.fullName?.message}>
+              <Input {...register("fullName")} />
+            </FormField>
+
+            <FormField label="CPF" error={errors.cpf?.message}>
+              <Input
+                name={cpfField.name}
+                onBlur={cpfField.onBlur}
+                ref={cpfField.ref}
+                value={formatCpf(cpfValue ?? "")}
+                onChange={(event) => setValue("cpf", onlyDigits(event.target.value), { shouldValidate: true })}
+              />
+            </FormField>
+
+            <FormField label="Telefone" error={errors.phone?.message}>
+              <Input {...register("phone")} />
+            </FormField>
+
+            <FormField label="Telefone secundario" error={errors.secondaryPhone?.message}>
+              <Input {...register("secondaryPhone")} />
+            </FormField>
+
+            <FormField label="Email" error={errors.email?.message}>
+              <Input {...register("email")} />
+            </FormField>
+
+            <label className="flex items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
+              <Checkbox {...register("isActive")} />
+              Cliente ativo
+            </label>
+          </div>
+
+          <FormField
+            error={errors.notesGeneral?.message}
+            hint="Use este campo para pontos de atencao, contexto financeiro ou observacoes operacionais."
+            label="Observacoes"
+          >
+            <Textarea {...register("notesGeneral")} />
           </FormField>
 
-          <FormField label="CPF" error={errors.cpf?.message}>
-            <Input
-              name={cpfField.name}
-              onBlur={cpfField.onBlur}
-              ref={cpfField.ref}
-              value={formatCpf(cpfValue ?? "")}
-              onChange={(event) => setValue("cpf", onlyDigits(event.target.value), { shouldValidate: true })}
-            />
-          </FormField>
+          {error ? <div className="text-sm text-danger">{error}</div> : null}
 
-          <FormField label="Telefone" error={errors.phone?.message}>
-            <Input {...register("phone")} />
-          </FormField>
-
-          <FormField label="Telefone secundario" error={errors.secondaryPhone?.message}>
-            <Input {...register("secondaryPhone")} />
-          </FormField>
-
-          <FormField label="Email" error={errors.email?.message}>
-            <Input {...register("email")} />
-          </FormField>
-
-          <label className="flex items-center gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm">
-            <Checkbox {...register("isActive")} />
-            Cliente ativo
-          </label>
-        </div>
-
-        <FormField label="Observacoes" error={errors.notesGeneral?.message}>
-          <Textarea {...register("notesGeneral")} />
-        </FormField>
-
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
-
-        <div className="flex gap-2">
-          <Button disabled={isSubmitting} type="submit">
-            Salvar cliente
-          </Button>
-          <Button onClick={() => router.push("/clients")} type="button" variant="secondary">
-            Cancelar
-          </Button>
-        </div>
-      </form>
-    </Card>
+          <div className="flex flex-wrap gap-3">
+            <LoadingButton
+              loading={isSubmitting}
+              loadingText={client ? "Atualizando cliente..." : "Salvando cliente..."}
+              type="submit"
+            >
+              Salvar cliente
+            </LoadingButton>
+            <Button disabled={isSubmitting} onClick={() => router.push("/clients")} type="button" variant="secondary">
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
   );
 }

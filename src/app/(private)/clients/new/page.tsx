@@ -5,7 +5,10 @@ import { ClientForm } from "@/components/clients/ClientForm";
 export default function NewClientPage() {
   return (
     <AuthGuard>
-      <AppShell title="Novo cliente">
+      <AppShell
+        subtitle="Cadastro do perfil base do cliente antes do controle anual."
+        title="Novo cliente"
+      >
         <ClientForm />
       </AppShell>
     </AuthGuard>

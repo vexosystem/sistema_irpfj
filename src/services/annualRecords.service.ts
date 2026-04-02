@@ -9,48 +9,64 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
+import { HttpsCallableResult, httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
-import { AnnualRecord, AnnualRecordFormValues } from "@/types/annualRecord";
+import { getFirebaseErrorMessage } from "@/lib/utils/firebase-error";
 import { toISOString } from "@/lib/utils/firestore";
+import { AnnualRecord, AnnualRecordFormValues } from "@/types/annualRecord";
+
+type SaveGovCredentialPayload = {
+  clientId: string;
+  recordId: string;
+  govLogin: string;
+  govPassword: string;
+};
+
+type SaveGovCredentialResponse = {
+  govCredentialRef: string;
+};
+
+type GetGovCredentialPayload = {
+  clientId: string;
+  recordId: string;
+};
+
+type GetGovCredentialResponse = {
+  govLogin: string;
+  govPassword: string;
+};
+
+type DeleteGovCredentialPayload = {
+  credentialId: string;
+};
+
+type DeleteAnnualRecordPayload = {
+  clientId: string;
+  recordId: string;
+};
+
+type DeleteAnnualRecordResponse = {
+  deleted: boolean;
+};
+
+type DeleteGovCredentialResponse = {
+  deleted: boolean;
+};
 
 function annualRecordsCollection(clientId: string) {
   return collection(db, "clients", clientId, "annualRecords");
 }
 
-export async function listAnnualRecords(clientId: string) {
-  const snapshot = await getDocs(query(annualRecordsCollection(clientId), orderBy("year", "desc")));
-  return snapshot.docs.map<AnnualRecord>((item) => ({
-    id: item.id,
-    year: item.get("year") as number,
-    govLogin: item.get("govLogin") as string,
-    govCredentialRef: item.get("govCredentialRef") as string | undefined,
-    hasWithholding: item.get("hasWithholding") as boolean,
-    withholdingNotes: item.get("withholdingNotes") as string,
-    taxResultType: item.get("taxResultType") as AnnualRecord["taxResultType"],
-    taxResultAmount: item.get("taxResultAmount") as number,
-    status: item.get("status") as AnnualRecord["status"],
-    servicePaid: item.get("servicePaid") as boolean,
-    servicePaidAmount: item.get("servicePaidAmount") as number,
-    servicePaidAt: toISOString(item.get("servicePaidAt")) ?? null,
-    observation: item.get("observation") as string,
-    createdBy: item.get("createdBy") as string,
-    updatedBy: item.get("updatedBy") as string,
-    createdAt: toISOString(item.get("createdAt")),
-    updatedAt: toISOString(item.get("updatedAt")),
-  }));
+function normalizeDriveLink(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-export async function getAnnualRecord(clientId: string, recordId: string) {
-  const snapshot = await getDoc(doc(db, "clients", clientId, "annualRecords", recordId));
-  if (!snapshot.exists()) {
-    return null;
-  }
-
+function mapAnnualRecord(snapshot: Awaited<ReturnType<typeof getDoc>>) {
   return {
     id: snapshot.id,
     year: snapshot.get("year") as number,
     govLogin: snapshot.get("govLogin") as string,
+    driveLink: normalizeDriveLink(snapshot.get("driveLink")),
     govCredentialRef: snapshot.get("govCredentialRef") as string | undefined,
     hasWithholding: snapshot.get("hasWithholding") as boolean,
     withholdingNotes: snapshot.get("withholdingNotes") as string,
@@ -68,36 +84,107 @@ export async function getAnnualRecord(clientId: string, recordId: string) {
   } satisfies AnnualRecord;
 }
 
+async function callSaveGovCredential(
+  payload: SaveGovCredentialPayload,
+): Promise<HttpsCallableResult<SaveGovCredentialResponse>> {
+  const saveCredential = httpsCallable<SaveGovCredentialPayload, SaveGovCredentialResponse>(
+    functions,
+    "saveGovCredential",
+  );
+
+  return saveCredential(payload);
+}
+
+async function callGetGovCredential(
+  payload: GetGovCredentialPayload,
+): Promise<HttpsCallableResult<GetGovCredentialResponse>> {
+  const readCredential = httpsCallable<GetGovCredentialPayload, GetGovCredentialResponse>(
+    functions,
+    "getGovCredential",
+  );
+
+  return readCredential(payload);
+}
+
+async function callDeleteGovCredential(
+  payload: DeleteGovCredentialPayload,
+): Promise<HttpsCallableResult<DeleteGovCredentialResponse>> {
+  const deleteCredential = httpsCallable<DeleteGovCredentialPayload, DeleteGovCredentialResponse>(
+    functions,
+    "deleteGovCredential",
+  );
+
+  return deleteCredential(payload);
+}
+
+async function callDeleteAnnualRecord(
+  payload: DeleteAnnualRecordPayload,
+): Promise<HttpsCallableResult<DeleteAnnualRecordResponse>> {
+  const deleteRecord = httpsCallable<DeleteAnnualRecordPayload, DeleteAnnualRecordResponse>(
+    functions,
+    "deleteAnnualRecord",
+  );
+
+  return deleteRecord(payload);
+}
+
+export async function listAnnualRecords(clientId: string) {
+  try {
+    const snapshot = await getDocs(query(annualRecordsCollection(clientId), orderBy("year", "desc")));
+    return snapshot.docs.map<AnnualRecord>((item) => mapAnnualRecord(item));
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel listar os exercicios."));
+  }
+}
+
+export async function getAnnualRecord(clientId: string, recordId: string) {
+  try {
+    const snapshot = await getDoc(doc(db, "clients", clientId, "annualRecords", recordId));
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return mapAnnualRecord(snapshot);
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel carregar o exercicio."));
+  }
+}
+
 export async function createAnnualRecord(
   clientId: string,
   values: AnnualRecordFormValues,
   actorUid: string,
 ) {
-  const ref = doc(annualRecordsCollection(clientId));
+  try {
+    const ref = doc(annualRecordsCollection(clientId));
 
-  await setDoc(ref, {
-    year: values.year,
-    govLogin: values.govLogin,
-    hasWithholding: values.hasWithholding,
-    withholdingNotes: values.withholdingNotes,
-    taxResultType: values.taxResultType,
-    taxResultAmount: values.taxResultAmount,
-    status: values.status,
-    servicePaid: values.servicePaid,
-    servicePaidAmount: values.servicePaidAmount,
-    servicePaidAt: values.servicePaid ? serverTimestamp() : null,
-    observation: values.observation,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    createdBy: actorUid,
-    updatedBy: actorUid,
-  });
+    await setDoc(ref, {
+      year: values.year,
+      govLogin: values.govLogin,
+      driveLink: values.driveLink?.trim() ?? "",
+      hasWithholding: values.hasWithholding,
+      withholdingNotes: values.withholdingNotes,
+      taxResultType: values.taxResultType,
+      taxResultAmount: values.taxResultAmount,
+      status: values.status,
+      servicePaid: values.servicePaid,
+      servicePaidAmount: values.servicePaidAmount,
+      servicePaidAt: values.servicePaid ? serverTimestamp() : null,
+      observation: values.observation,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdBy: actorUid,
+      updatedBy: actorUid,
+    });
 
-  if (values.govPassword) {
-    await saveGovCredential(clientId, ref.id, values.govLogin, values.govPassword);
+    if (values.updateGovPassword) {
+      await saveGovCredential(clientId, ref.id, values.govLogin, values.govPassword);
+    }
+
+    return ref.id;
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel criar o exercicio."));
   }
-
-  return ref.id;
 }
 
 export async function updateAnnualRecord(
@@ -106,24 +193,29 @@ export async function updateAnnualRecord(
   values: AnnualRecordFormValues,
   actorUid: string,
 ) {
-  await updateDoc(doc(db, "clients", clientId, "annualRecords", recordId), {
-    year: values.year,
-    govLogin: values.govLogin,
-    hasWithholding: values.hasWithholding,
-    withholdingNotes: values.withholdingNotes,
-    taxResultType: values.taxResultType,
-    taxResultAmount: values.taxResultAmount,
-    status: values.status,
-    servicePaid: values.servicePaid,
-    servicePaidAmount: values.servicePaidAmount,
-    servicePaidAt: values.servicePaid ? serverTimestamp() : null,
-    observation: values.observation,
-    updatedAt: serverTimestamp(),
-    updatedBy: actorUid,
-  });
+  try {
+    await updateDoc(doc(db, "clients", clientId, "annualRecords", recordId), {
+      year: values.year,
+      govLogin: values.govLogin,
+      driveLink: values.driveLink?.trim() ?? "",
+      hasWithholding: values.hasWithholding,
+      withholdingNotes: values.withholdingNotes,
+      taxResultType: values.taxResultType,
+      taxResultAmount: values.taxResultAmount,
+      status: values.status,
+      servicePaid: values.servicePaid,
+      servicePaidAmount: values.servicePaidAmount,
+      servicePaidAt: values.servicePaid ? serverTimestamp() : null,
+      observation: values.observation,
+      updatedAt: serverTimestamp(),
+      updatedBy: actorUid,
+    });
 
-  if (values.govPassword) {
-    await saveGovCredential(clientId, recordId, values.govLogin, values.govPassword);
+    if (values.updateGovPassword) {
+      await saveGovCredential(clientId, recordId, values.govLogin, values.govPassword);
+    }
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel atualizar o exercicio."));
   }
 }
 
@@ -143,6 +235,9 @@ export async function duplicateAnnualRecord(
     {
       year: newYear,
       govLogin: source.govLogin,
+      govPassword: "",
+      updateGovPassword: false,
+      driveLink: source.driveLink ?? "",
       hasWithholding: source.hasWithholding,
       withholdingNotes: source.withholdingNotes,
       taxResultType: source.taxResultType,
@@ -162,25 +257,34 @@ export async function saveGovCredential(
   govLogin: string,
   govPassword: string,
 ) {
-  const saveCredential = httpsCallable<
-    {
-      clientId: string;
-      recordId: string;
-      govLogin: string;
-      govPassword: string;
-    },
-    { govCredentialRef: string }
-  >(functions, "saveGovCredential");
-
-  return saveCredential({ clientId, recordId, govLogin, govPassword });
+  try {
+    return await callSaveGovCredential({ clientId, recordId, govLogin, govPassword });
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel salvar a credencial gov."));
+  }
 }
 
 export async function getGovCredential(clientId: string, recordId: string) {
-  const readCredential = httpsCallable<
-    { clientId: string; recordId: string },
-    { govLogin: string; govPassword: string }
-  >(functions, "getGovCredential");
+  try {
+    const result = await callGetGovCredential({ clientId, recordId });
+    return result.data;
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel ler a credencial gov."));
+  }
+}
 
-  const result = await readCredential({ clientId, recordId });
-  return result.data;
+export async function deleteGovCredential(credentialId: string) {
+  try {
+    await callDeleteGovCredential({ credentialId });
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel excluir a credencial gov."));
+  }
+}
+
+export async function deleteAnnualRecord(clientId: string, recordId: string) {
+  try {
+    await callDeleteAnnualRecord({ clientId, recordId });
+  } catch (error) {
+    throw new Error(getFirebaseErrorMessage(error, "Nao foi possivel excluir o exercicio."));
+  }
 }

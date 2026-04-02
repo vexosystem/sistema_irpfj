@@ -10,6 +10,7 @@ export type AnnualRecord = {
   id: string;
   year: number;
   govLogin: string;
+  driveLink?: string;
   govCredentialRef?: string;
   hasWithholding: boolean;
   withholdingNotes: string;
@@ -29,7 +30,9 @@ export type AnnualRecord = {
 export type AnnualRecordFormValues = {
   year: number;
   govLogin: string;
-  govPassword?: string;
+  govPassword: string;
+  updateGovPassword: boolean;
+  driveLink?: string;
   hasWithholding: boolean;
   withholdingNotes: string;
   taxResultType: TaxResultType;

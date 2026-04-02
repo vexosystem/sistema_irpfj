@@ -1,24 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { User } from "firebase/auth";
-import { syncOwnerUser, watchAuthState } from "@/lib/auth/auth-client";
+import { useContext } from "react";
+import { AuthContext } from "@/components/layout/AuthProvider";
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const context = useContext(AuthContext);
 
-  useEffect(() => {
-    const unsubscribe = watchAuthState((nextUser) => {
-      if (nextUser) {
-        void syncOwnerUser(nextUser);
-      }
-      setUser(nextUser);
-      setLoading(false);
-    });
+  if (!context) {
+    throw new Error("useAuth must be used within AuthProvider.");
+  }
 
-    return unsubscribe;
-  }, []);
-
-  return { user, loading };
+  return context;
 }

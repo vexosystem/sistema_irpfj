@@ -5,54 +5,146 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isOwner() {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "owner";
+    function userDocPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
     }
 
-    function creatingSelfUser() {
-      return request.resource.data.role == "owner"
+    function userDocExists(uid) {
+      return exists(userDocPath(uid));
+    }
+
+    function isActiveOwner(uid) {
+      return userDocExists(uid)
+        && get(userDocPath(uid)).data.role == "owner"
+        && get(userDocPath(uid)).data.isActive == true;
+    }
+
+    function isOwner() {
+      return isAuthenticated() && isActiveOwner(request.auth.uid);
+    }
+
+    function isSelf(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function validDriveLink(value) {
+      return !(value is string) || value.size() == 0 || value.matches('https://.*');
+    }
+
+    function validOwnerBootstrap(uid) {
+      return request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.email is string
         && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == "owner"
         && request.resource.data.isActive == true;
     }
 
-    function validClientWrite() {
-      return request.resource.data.cpfDigits is string
+    function validOwnerSelfUpdate() {
+      return request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.email is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == "owner"
+        && request.resource.data.isActive == true
+        && (
+          !("createdAt" in resource.data)
+          || request.resource.data.createdAt == resource.data.createdAt
+        );
+    }
+
+    function validClientCreate() {
+      return request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 3
+        && request.resource.data.cpf is string
+        && request.resource.data.cpfDigits is string
+        && request.resource.data.cpf == request.resource.data.cpfDigits
         && request.resource.data.cpfDigits.size() == 11
+        && request.resource.data.email is string
+        && request.resource.data.phone is string
+        && request.resource.data.secondaryPhone is string
+        && request.resource.data.isActive is bool
+        && request.resource.data.notesGeneral is string
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.updatedBy == request.auth.uid;
     }
 
-    function validAnnualRecordWrite() {
+    function validClientUpdate() {
+      return request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 3
+        && request.resource.data.cpf is string
+        && request.resource.data.cpfDigits is string
+        && request.resource.data.cpf == request.resource.data.cpfDigits
+        && request.resource.data.cpfDigits.size() == 11
+        && request.resource.data.email is string
+        && request.resource.data.phone is string
+        && request.resource.data.secondaryPhone is string
+        && request.resource.data.isActive is bool
+        && request.resource.data.notesGeneral is string
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validAnnualRecordCreate() {
       return request.resource.data.year is int
-        && (!("govCredentialRef" in request.resource.data) || request.resource.data.govCredentialRef == resource.data.govCredentialRef)
+        && request.resource.data.govLogin is string
+        && request.resource.data.govLogin.size() > 0
+        && request.resource.data.driveLink is string
+        && validDriveLink(request.resource.data.driveLink)
+        && request.resource.data.hasWithholding is bool
+        && request.resource.data.withholdingNotes is string
+        && request.resource.data.taxResultType in ["a_pagar", "a_restituir", "sem_resultado"]
+        && request.resource.data.taxResultAmount is number
+        && request.resource.data.status in ["pendente", "aguardando_documentos", "em_andamento", "finalizado"]
+        && request.resource.data.servicePaid is bool
+        && request.resource.data.servicePaidAmount is number
+        && request.resource.data.observation is string
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.updatedBy == request.auth.uid;
+    }
+
+    function validAnnualRecordUpdate() {
+      return request.resource.data.year is int
+        && request.resource.data.govLogin is string
+        && request.resource.data.govLogin.size() > 0
+        && request.resource.data.driveLink is string
+        && validDriveLink(request.resource.data.driveLink)
+        && request.resource.data.hasWithholding is bool
+        && request.resource.data.withholdingNotes is string
+        && request.resource.data.taxResultType in ["a_pagar", "a_restituir", "sem_resultado"]
+        && request.resource.data.taxResultAmount is number
+        && request.resource.data.status in ["pendente", "aguardando_documentos", "em_andamento", "finalizado"]
+        && request.resource.data.servicePaid is bool
+        && request.resource.data.servicePaidAmount is number
+        && request.resource.data.observation is string
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          !("govCredentialRef" in request.resource.data)
+          || request.resource.data.govCredentialRef == resource.data.govCredentialRef
+        );
     }
 
     match /users/{uid} {
-      allow read: if isOwner();
-      allow create: if isAuthenticated() && request.auth.uid == uid && creatingSelfUser();
-      allow update: if isOwner() && request.auth.uid == uid;
+      allow read: if isSelf(uid) || isOwner();
+      allow create: if isSelf(uid) && validOwnerBootstrap(uid);
+      allow update: if isSelf(uid) && validOwnerSelfUpdate();
       allow delete: if false;
     }
 
     match /clients/{clientId} {
       allow read: if isOwner();
-      allow create, update: if isOwner() && validClientWrite();
-      allow delete: if false;
+      allow create: if isOwner() && validClientCreate();
+      allow update: if isOwner() && validClientUpdate();
+      allow delete: if isOwner();
 
       match /annualRecords/{recordId} {
         allow read: if isOwner();
-        allow create, update: if isOwner() && validAnnualRecordWrite();
-        allow delete: if false;
-
-        match /documents/{docId} {
-          allow read: if isOwner();
-          allow create: if isOwner()
-            && request.resource.data.uploadedBy == request.auth.uid;
-          allow update: if false;
-          allow delete: if isOwner();
-        }
+        allow create: if isOwner() && validAnnualRecordCreate();
+        allow update: if isOwner() && validAnnualRecordUpdate();
+        allow delete: if isOwner();
       }
     }
 
