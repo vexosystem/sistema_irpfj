@@ -15,6 +15,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCpf } from "@/lib/utils/format";
 import { deleteClient } from "@/services/clients.service";
 
+const CLIENTS_FEEDBACK_KEY = "clients-feedback";
+
 export function ClientsList() {
   const { isOwnerReady } = useAuth();
   const { clients, loading, error, fetchClients } = useClientsStore();
@@ -22,6 +24,7 @@ export function ClientsList() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [deletingClientId, setDeletingClientId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,8 +37,23 @@ export function ClientsList() {
     });
   }, [fetchClients, isOwnerReady]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedFeedback = window.sessionStorage.getItem(CLIENTS_FEEDBACK_KEY);
+    if (!storedFeedback) {
+      return;
+    }
+
+    setFeedback(storedFeedback);
+    window.sessionStorage.removeItem(CLIENTS_FEEDBACK_KEY);
+  }, []);
+
   const filteredClients = useMemo(() => {
     const normalized = search.trim().toLowerCase();
+
     return clients.filter((client) => {
       const matchesSearch =
         normalized.length === 0 ||
@@ -64,11 +82,13 @@ export function ClientsList() {
     }
 
     setDeleteError(null);
+    setFeedback(null);
     setDeletingClientId(clientId);
 
     try {
       await deleteClient(clientId);
       await fetchClients();
+      setFeedback(`Cliente ${clientName} excluido com sucesso.`);
     } catch (deleteClientError) {
       setDeleteError(
         deleteClientError instanceof Error
@@ -83,8 +103,8 @@ export function ClientsList() {
   return (
     <AppShell
       actions={
-        <Link href="/clients/new">
-          <Button>Novo cliente</Button>
+        <Link className="w-full sm:w-auto" href="/clients/new">
+          <Button className="w-full sm:w-auto">Novo cliente</Button>
         </Link>
       }
       subtitle="Consulte, filtre e acompanhe rapidamente a base de clientes ativos e inativos."
@@ -92,9 +112,10 @@ export function ClientsList() {
     >
       {error && !loading ? <Card className="border-danger/40 text-sm text-danger">{error}</Card> : null}
       {deleteError ? <Card className="border-danger/40 text-sm text-danger">{deleteError}</Card> : null}
+      {feedback ? <Card className="border-success/40 text-sm text-success">{feedback}</Card> : null}
 
-      <Card className="grid gap-4 lg:grid-cols-[1.6fr_220px_auto] lg:items-end">
-        <div className="space-y-2">
+      <Card className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_220px_auto] lg:items-end">
+        <div className="min-w-0 space-y-2">
           <p className="text-sm font-semibold text-foreground">Busca rapida</p>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -130,7 +151,7 @@ export function ClientsList() {
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Card>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Total clientes</p>
           {isInitialLoading ? (
@@ -147,7 +168,7 @@ export function ClientsList() {
             <p className="mt-2 text-3xl font-bold text-foreground">{clients.filter((item) => item.isActive).length}</p>
           )}
         </Card>
-        <Card>
+        <Card className="sm:col-span-2 xl:col-span-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Inativos</p>
           {isInitialLoading ? (
             <Skeleton className="mt-3 h-9 w-20" />
@@ -159,77 +180,143 @@ export function ClientsList() {
         </Card>
       </div>
 
-      <Card className="overflow-hidden p-0">
-        <table className="min-w-full text-sm">
-          <thead className="bg-surface-strong text-left text-muted">
-            <tr>
-              <th className="px-4 py-4 font-semibold">Nome</th>
-              <th className="px-4 py-4 font-semibold">CPF</th>
-              <th className="px-4 py-4 font-semibold">Email</th>
-              <th className="px-4 py-4 font-semibold">Status</th>
-              <th className="px-4 py-4 font-semibold">Acoes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isInitialLoading
-              ? Array.from({ length: 5 }).map((_, index) => (
-                  <tr className="border-t border-border/70" key={`client-skeleton-${index}`}>
-                    <td className="px-4 py-4">
-                      <Skeleton className="h-5 w-40" />
-                    </td>
-                    <td className="px-4 py-4">
-                      <Skeleton className="h-5 w-28" />
-                    </td>
-                    <td className="px-4 py-4">
-                      <Skeleton className="h-5 w-44" />
-                    </td>
-                    <td className="px-4 py-4">
-                      <Skeleton className="h-6 w-20" />
-                    </td>
-                    <td className="px-4 py-4">
-                      <Skeleton className="h-10 w-36" />
-                    </td>
-                  </tr>
-                ))
-              : filteredClients.map((client) => (
-                  <tr className="border-t border-border/70" key={client.id}>
-                    <td className="px-4 py-4 font-medium text-foreground">{client.fullName}</td>
-                    <td className="px-4 py-4 text-muted">{formatCpf(client.cpfDigits)}</td>
-                    <td className="px-4 py-4 text-muted">{client.email || "-"}</td>
-                    <td className="px-4 py-4">
-                      <Badge tone={client.isActive ? "success" : "warning"}>
-                        {client.isActive ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/clients/${client.id}`}>
-                          <Button variant="secondary">Abrir</Button>
-                        </Link>
-                        <Link href={`/clients/${client.id}/edit`}>
-                          <Button variant="secondary">Editar</Button>
-                        </Link>
-                        <LoadingButton
-                          loading={deletingClientId === client.id}
-                          loadingText="Excluindo..."
-                          onClick={() => void handleDeleteClient(client.id, client.fullName)}
-                          type="button"
-                          variant="danger"
-                        >
-                          <Trash2 size={16} />
-                          Excluir
-                        </LoadingButton>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-          </tbody>
-        </table>
+      <div className="space-y-4 md:hidden">
+        {isInitialLoading
+          ? Array.from({ length: 5 }).map((_, index) => (
+              <Card className="space-y-4" key={`client-card-skeleton-${index}`}>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-full" />
+                <div className="grid gap-2">
+                  <Skeleton className="h-11 w-full" />
+                  <Skeleton className="h-11 w-full" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+              </Card>
+            ))
+          : filteredClients.map((client) => (
+              <Card className="space-y-4" key={client.id}>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h2 className="break-words text-lg font-semibold text-foreground">{client.fullName}</h2>
+                      <p className="mt-1 text-sm text-muted">{formatCpf(client.cpfDigits)}</p>
+                    </div>
+                    <Badge tone={client.isActive ? "success" : "warning"}>
+                      {client.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </div>
 
-        {!isInitialLoading && !loading && filteredClients.length === 0 ? (
-          <p className="p-5 text-sm text-muted">Nenhum cliente encontrado com os filtros atuais.</p>
-        ) : null}
+                  <div className="space-y-2 rounded-2xl border border-border bg-surface-strong p-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Email</p>
+                      <p className="mt-1 break-all text-sm text-foreground">{client.email || "-"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Link className="w-full" href={`/clients/${client.id}`}>
+                    <Button className="w-full" variant="secondary">
+                      Abrir
+                    </Button>
+                  </Link>
+                  <Link className="w-full" href={`/clients/${client.id}/edit`}>
+                    <Button className="w-full" variant="secondary">
+                      Editar
+                    </Button>
+                  </Link>
+                  <LoadingButton
+                    className="w-full"
+                    loading={deletingClientId === client.id}
+                    loadingText="Excluindo..."
+                    onClick={() => void handleDeleteClient(client.id, client.fullName)}
+                    type="button"
+                    variant="danger"
+                  >
+                    <Trash2 size={16} />
+                    Excluir
+                  </LoadingButton>
+                </div>
+              </Card>
+            ))}
+      </div>
+
+      <Card className="hidden overflow-hidden p-0 md:block">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-surface-strong text-left text-muted">
+              <tr>
+                <th className="px-4 py-4 font-semibold">Nome</th>
+                <th className="px-4 py-4 font-semibold">CPF</th>
+                <th className="px-4 py-4 font-semibold">Email</th>
+                <th className="px-4 py-4 font-semibold">Status</th>
+                <th className="px-4 py-4 font-semibold">Acoes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isInitialLoading
+                ? Array.from({ length: 5 }).map((_, index) => (
+                    <tr className="border-t border-border/70" key={`client-skeleton-${index}`}>
+                      <td className="px-4 py-4">
+                        <Skeleton className="h-5 w-40" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <Skeleton className="h-5 w-28" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <Skeleton className="h-5 w-44" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <Skeleton className="h-6 w-20" />
+                      </td>
+                      <td className="px-4 py-4">
+                        <Skeleton className="h-10 w-36" />
+                      </td>
+                    </tr>
+                  ))
+                : filteredClients.map((client) => (
+                    <tr className="border-t border-border/70" key={client.id}>
+                      <td className="px-4 py-4 font-medium text-foreground">{client.fullName}</td>
+                      <td className="px-4 py-4 text-muted">{formatCpf(client.cpfDigits)}</td>
+                      <td className="px-4 py-4 text-muted">{client.email || "-"}</td>
+                      <td className="px-4 py-4">
+                        <Badge tone={client.isActive ? "success" : "warning"}>
+                          {client.isActive ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Link href={`/clients/${client.id}`}>
+                            <Button variant="secondary">Abrir</Button>
+                          </Link>
+                          <Link href={`/clients/${client.id}/edit`}>
+                            <Button variant="secondary">Editar</Button>
+                          </Link>
+                          <LoadingButton
+                            loading={deletingClientId === client.id}
+                            loadingText="Excluindo..."
+                            onClick={() => void handleDeleteClient(client.id, client.fullName)}
+                            type="button"
+                            variant="danger"
+                          >
+                            <Trash2 size={16} />
+                            Excluir
+                          </LoadingButton>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
+
+      {!isInitialLoading && !loading && filteredClients.length === 0 ? (
+        <Card>
+          <p className="text-sm text-muted">Nenhum cliente encontrado com os filtros atuais.</p>
+        </Card>
+      ) : null}
     </AppShell>
   );
 }

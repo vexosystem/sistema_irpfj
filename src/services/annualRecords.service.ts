@@ -40,6 +40,10 @@ type DeleteGovCredentialPayload = {
   credentialId: string;
 };
 
+type DeleteGovCredentialResponse = {
+  deleted: boolean;
+};
+
 type DeleteAnnualRecordPayload = {
   clientId: string;
   recordId: string;
@@ -47,14 +51,16 @@ type DeleteAnnualRecordPayload = {
 
 type DeleteAnnualRecordResponse = {
   deleted: boolean;
-};
-
-type DeleteGovCredentialResponse = {
-  deleted: boolean;
+  deletedCredentialId: string | null;
+  year: number | null;
 };
 
 function annualRecordsCollection(clientId: string) {
   return collection(db, "clients", clientId, "annualRecords");
+}
+
+function annualRecordDocument(clientId: string, recordId: string) {
+  return doc(db, "clients", clientId, "annualRecords", recordId);
 }
 
 function normalizeDriveLink(value: unknown): string | undefined {
@@ -139,7 +145,7 @@ export async function listAnnualRecords(clientId: string) {
 
 export async function getAnnualRecord(clientId: string, recordId: string) {
   try {
-    const snapshot = await getDoc(doc(db, "clients", clientId, "annualRecords", recordId));
+    const snapshot = await getDoc(annualRecordDocument(clientId, recordId));
     if (!snapshot.exists()) {
       return null;
     }
@@ -194,7 +200,7 @@ export async function updateAnnualRecord(
   actorUid: string,
 ) {
   try {
-    await updateDoc(doc(db, "clients", clientId, "annualRecords", recordId), {
+    await updateDoc(annualRecordDocument(clientId, recordId), {
       year: values.year,
       govLogin: values.govLogin,
       driveLink: values.driveLink?.trim() ?? "",

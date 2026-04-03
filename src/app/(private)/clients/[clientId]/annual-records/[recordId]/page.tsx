@@ -6,6 +6,7 @@ import { Copy, ExternalLink, Eye, EyeOff, KeyRound, Trash2 } from "lucide-react"
 import { useParams, useRouter } from "next/navigation";
 import { AuthGuard } from "@/components/layout/AuthGuard";
 import { AppShell } from "@/components/layout/AppShell";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { LoadingButton } from "@/components/ui/LoadingButton";
 import { SectionLoader } from "@/components/ui/SectionLoader";
@@ -18,6 +19,10 @@ type GovCredential = {
   govLogin: string;
   govPassword: string;
 };
+
+function getClientFeedbackKey(clientId: string) {
+  return `client-feedback:${clientId}`;
+}
 
 function AnnualRecordDetailsContent() {
   const params = useParams<{ clientId: string; recordId: string }>();
@@ -100,6 +105,14 @@ function AnnualRecordDetailsContent() {
 
     try {
       await deleteAnnualRecord(params.clientId, record.id);
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          getClientFeedbackKey(params.clientId),
+          `Exercicio ${record.year} excluido com sucesso.`,
+        );
+      }
+
       router.push(`/clients/${params.clientId}`);
     } catch (deleteRecordError) {
       setError(
@@ -107,6 +120,7 @@ function AnnualRecordDetailsContent() {
           ? deleteRecordError.message
           : "Nao foi possivel excluir o exercicio.",
       );
+    } finally {
       setDeletingRecord(false);
     }
   }
@@ -116,18 +130,19 @@ function AnnualRecordDetailsContent() {
       subtitle="Visualizacao completa do exercicio anual e das credenciais protegidas."
       title={`Exercicio ${record?.year ?? ""}`}
     >
-      <div className="flex flex-wrap gap-3">
-        <Link href={`/clients/${params.clientId}`}>
-          <LoadingButton loading={false} type="button" variant="secondary">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Link className="w-full sm:w-auto" href={`/clients/${params.clientId}`}>
+          <Button className="w-full sm:w-auto" type="button" variant="secondary">
             Voltar para clientes
-          </LoadingButton>
+          </Button>
         </Link>
-        <Link href={`/clients/${params.clientId}/annual-records/${params.recordId}/edit`}>
-          <LoadingButton loading={false} type="button" variant="secondary">
+        <Link className="w-full sm:w-auto" href={`/clients/${params.clientId}/annual-records/${params.recordId}/edit`}>
+          <Button className="w-full sm:w-auto" type="button" variant="secondary">
             Editar exercicio
-          </LoadingButton>
+          </Button>
         </Link>
         <LoadingButton
+          className="w-full sm:w-auto"
           loading={deletingRecord}
           loadingText="Excluindo exercicio..."
           onClick={() => void handleDeleteRecord()}
@@ -149,9 +164,9 @@ function AnnualRecordDetailsContent() {
       ) : null}
 
       {!loading && record ? (
-        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
           <Card className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="rounded-2xl border border-border bg-surface-strong p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Status</p>
                 <p className="mt-2 text-lg font-semibold text-foreground">{record.status}</p>
@@ -177,14 +192,14 @@ function AnnualRecordDetailsContent() {
             <div className="space-y-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Login gov</p>
-                <p className="text-sm text-muted">{record.govLogin}</p>
+                <p className="mt-1 break-all text-sm text-muted">{record.govLogin}</p>
               </div>
 
               <div>
                 <p className="text-sm font-semibold text-foreground">Link Google Drive</p>
                 {record.driveLink ? (
                   <a
-                    className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                    className="mt-2 inline-flex items-center gap-2 break-all text-sm font-medium text-primary hover:underline"
                     href={record.driveLink}
                     rel="noreferrer"
                     target="_blank"
@@ -199,7 +214,7 @@ function AnnualRecordDetailsContent() {
 
               <div>
                 <p className="text-sm font-semibold text-foreground">Retencao</p>
-                <p className="text-sm text-muted">
+                <p className="mt-1 break-words text-sm text-muted">
                   {record.hasWithholding
                     ? record.withholdingNotes || "Informada sem observacao."
                     : "Nao possui retencao."}
@@ -208,7 +223,7 @@ function AnnualRecordDetailsContent() {
 
               <div>
                 <p className="text-sm font-semibold text-foreground">Observacao</p>
-                <p className="text-sm text-muted">{record.observation || "-"}</p>
+                <p className="mt-1 break-words text-sm text-muted">{record.observation || "-"}</p>
               </div>
             </div>
           </Card>
@@ -225,6 +240,7 @@ function AnnualRecordDetailsContent() {
             </div>
 
             <LoadingButton
+              className="w-full sm:w-auto"
               loading={credentialLoading}
               loadingText="Buscando credencial..."
               onClick={async () => {
@@ -253,12 +269,13 @@ function AnnualRecordDetailsContent() {
             {credential ? (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Login gov</p>
-                      <p className="mt-2 text-sm font-medium text-foreground">{credential.govLogin}</p>
+                      <p className="mt-2 break-all text-sm font-medium text-foreground">{credential.govLogin}</p>
                     </div>
                     <LoadingButton
+                      className="w-full sm:w-auto"
                       loading={copyingField === "login"}
                       loadingText="Copiando..."
                       onClick={() => void copyValue("Login gov", credential.govLogin)}
@@ -272,15 +289,16 @@ function AnnualRecordDetailsContent() {
                 </div>
 
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Senha gov</p>
                       <p className="mt-2 break-all text-sm font-medium text-foreground">
                         {revealedPassword ? credential.govPassword : "************"}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <LoadingButton
+                        className="w-full sm:w-auto"
                         disabled={credentialLoading}
                         loading={false}
                         onClick={() => setRevealedPassword((current) => !current)}
@@ -291,6 +309,7 @@ function AnnualRecordDetailsContent() {
                         {revealedPassword ? "Ocultar" : "Mostrar"}
                       </LoadingButton>
                       <LoadingButton
+                        className="w-full sm:w-auto"
                         loading={copyingField === "password"}
                         loadingText="Copiando..."
                         onClick={() => void copyValue("Senha gov", credential.govPassword)}

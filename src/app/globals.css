@@ -37,6 +37,7 @@
 html,
 body {
   min-height: 100%;
+  max-width: 100%;
 }
 
 html {
@@ -50,6 +51,7 @@ body {
     rgb(var(--background));
   color: rgb(var(--foreground));
   font-family: "Plus Jakarta Sans", sans-serif;
+  overflow-x: hidden;
   transition:
     background-color 200ms ease,
     color 200ms ease;
@@ -61,6 +63,18 @@ body {
 
 a {
   color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+img,
+svg {
+  max-width: 100%;
 }
 
 ::selection {

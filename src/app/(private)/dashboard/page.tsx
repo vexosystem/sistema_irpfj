@@ -64,7 +64,7 @@ function DashboardContent() {
       title="Dashboard"
     >
       {loading ? (
-        <div className="grid gap-4 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <Card key={`dashboard-skeleton-${index}`}>
               <Skeleton className="h-4 w-24" />
@@ -78,14 +78,14 @@ function DashboardContent() {
       {!loading && error ? (
         <Card className="space-y-3 border-danger/40 text-sm text-danger">
           <p>{error}</p>
-          <Button onClick={() => void loadDashboard()} type="button" variant="secondary">
+          <Button className="w-full sm:w-auto" onClick={() => void loadDashboard()} type="button" variant="secondary">
             Tentar novamente
           </Button>
         </Card>
       ) : null}
 
       {!loading && !error && loaded ? (
-        <div className="grid gap-4 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Total clientes</p>
             <p className="mt-3 text-4xl font-bold text-foreground">{totals.totalClients}</p>

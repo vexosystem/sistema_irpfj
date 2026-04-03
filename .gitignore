@@ -2,3 +2,5 @@
 node_modules
 .env.local
 functions/lib
+.env
+.env.*.local

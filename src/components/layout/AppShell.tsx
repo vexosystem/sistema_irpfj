@@ -31,22 +31,23 @@ export function AppShell({ title, subtitle, children, actions }: AppShellProps) 
   return (
     <div className="min-h-screen bg-app-gradient">
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-1">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-1">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">Sistema Imposto de Renda</p>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+              <div className="min-w-0">
+                <h1 className="break-words text-2xl font-bold tracking-tight text-foreground">{title}</h1>
                 {subtitle ? <p className="text-sm text-muted">{subtitle}</p> : null}
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={toggleTheme} type="button" variant="secondary">
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+              <Button className="w-full sm:w-auto" onClick={toggleTheme} type="button" variant="secondary">
                 {mounted && theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
                 {mounted && theme === "light" ? "Modo escuro" : "Modo claro"}
               </Button>
               <LoadingButton
+                className="w-full sm:w-auto"
                 loading={isSigningOut}
                 loadingText="Saindo..."
                 onClick={async () => {
@@ -68,12 +69,12 @@ export function AppShell({ title, subtitle, children, actions }: AppShellProps) 
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <nav className="flex flex-wrap gap-2">
+            <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
               {links.map((link) => (
                 <Link
                   key={link.href}
                   className={cn(
-                    "rounded-xl px-4 py-2 text-sm font-semibold transition",
+                    "whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition",
                     pathname.startsWith(link.href)
                       ? "bg-primary text-slate-950"
                       : "border border-border bg-surface-strong text-secondary hover:bg-surface",
@@ -85,12 +86,18 @@ export function AppShell({ title, subtitle, children, actions }: AppShellProps) 
               ))}
             </nav>
 
-            {actions ? <div className="flex flex-wrap justify-start gap-2 lg:justify-end">{actions}</div> : null}
+            {actions ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-start lg:justify-end [&>*]:w-full sm:[&>*]:w-auto">
+                {actions}
+              </div>
+            ) : null}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+      <main className="mx-auto w-full max-w-7xl min-w-0 space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {children}
+      </main>
     </div>
   );
 }

@@ -18,6 +18,10 @@ import { Client } from "@/types/client";
 import { formatCpf } from "@/lib/utils/format";
 import { useAuth } from "@/hooks/useAuth";
 
+function getClientFeedbackKey(clientId: string) {
+  return `client-feedback:${clientId}`;
+}
+
 export default function ClientDetailsPage() {
   const params = useParams<{ clientId: string }>();
   const router = useRouter();
@@ -25,6 +29,7 @@ export default function ClientDetailsPage() {
   const [client, setClient] = useState<Client | null>(null);
   const [records, setRecords] = useState<AnnualRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [duplicatingRecordId, setDuplicatingRecordId] = useState<string | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
@@ -53,6 +58,21 @@ export default function ClientDetailsPage() {
     void refresh();
   }, [params.clientId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const feedbackKey = getClientFeedbackKey(params.clientId);
+    const storedFeedback = window.sessionStorage.getItem(feedbackKey);
+    if (!storedFeedback) {
+      return;
+    }
+
+    setSuccess(storedFeedback);
+    window.sessionStorage.removeItem(feedbackKey);
+  }, [params.clientId]);
+
   async function handleDeleteClient() {
     if (!client) {
       return;
@@ -67,9 +87,15 @@ export default function ClientDetailsPage() {
     }
 
     setDeletingClient(true);
+    setSuccess(null);
 
     try {
       await deleteClient(client.id);
+
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("clients-feedback", `Cliente ${client.fullName} excluido com sucesso.`);
+      }
+
       router.push("/clients");
     } catch (deleteClientError) {
       setError(
@@ -92,10 +118,12 @@ export default function ClientDetailsPage() {
     }
 
     setDeletingRecordId(recordId);
+    setSuccess(null);
 
     try {
       await deleteAnnualRecord(params.clientId, recordId);
       setError(null);
+      setSuccess(`Exercicio ${year} excluido com sucesso.`);
       await refresh();
     } catch (deleteRecordError) {
       setError(
@@ -112,14 +140,15 @@ export default function ClientDetailsPage() {
     <AuthGuard>
       <AppShell
         actions={
-          <Link href={`/clients/${params.clientId}/annual-records/new`}>
-            <Button>Novo exercicio</Button>
+          <Link className="w-full sm:w-auto" href={`/clients/${params.clientId}/annual-records/new`}>
+            <Button className="w-full sm:w-auto">Novo exercicio</Button>
           </Link>
         }
         subtitle="Dados do cliente, contexto fiscal e historico anual centralizados em uma unica tela."
         title={client?.fullName ?? "Cliente"}
       >
         {error ? <Card className="border-danger/40 text-sm text-danger">{error}</Card> : null}
+        {success ? <Card className="border-success/40 text-sm text-success">{success}</Card> : null}
 
         {loading ? (
           <>
@@ -129,38 +158,45 @@ export default function ClientDetailsPage() {
         ) : null}
 
         {!loading && client ? (
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
             <Card className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Perfil do cliente</p>
-              <h2 className="text-2xl font-bold text-foreground">{client.fullName}</h2>
-              <div className="grid gap-3 md:grid-cols-2">
+              <h2 className="break-words text-2xl font-bold text-foreground">{client.fullName}</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">CPF</p>
                   <p className="mt-2 text-sm text-foreground">{formatCpf(client.cpfDigits)}</p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Email</p>
-                  <p className="mt-2 text-sm text-foreground">{client.email || "-"}</p>
+                  <p className="mt-2 break-all text-sm text-foreground">{client.email || "-"}</p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Telefone</p>
-                  <p className="mt-2 text-sm text-foreground">{client.phone || "-"}</p>
+                  <p className="mt-2 break-all text-sm text-foreground">{client.phone || "-"}</p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-strong p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Telefone secundario</p>
-                  <p className="mt-2 text-sm text-foreground">{client.secondaryPhone || "-"}</p>
+                  <p className="mt-2 break-all text-sm text-foreground">{client.secondaryPhone || "-"}</p>
                 </div>
               </div>
             </Card>
 
-            <Card className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Observacoes</p>
-              <p className="text-sm text-muted">{client.notesGeneral || "Nenhuma observacao cadastrada."}</p>
-              <div className="flex flex-wrap gap-2">
-                <Link href={`/clients/${params.clientId}/edit`}>
-                  <Button variant="secondary">Editar cliente</Button>
+            <Card className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Observacoes</p>
+                <p className="mt-2 break-words text-sm text-muted">
+                  {client.notesGeneral || "Nenhuma observacao cadastrada."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Link className="w-full sm:w-auto" href={`/clients/${params.clientId}/edit`}>
+                  <Button className="w-full sm:w-auto" variant="secondary">
+                    Editar cliente
+                  </Button>
                 </Link>
                 <LoadingButton
+                  className="w-full sm:w-auto"
                   loading={deletingClient}
                   loadingText="Excluindo cliente..."
                   onClick={() => void handleDeleteClient()}
@@ -183,6 +219,7 @@ export default function ClientDetailsPage() {
           clientId={params.clientId}
           deletingRecordId={deletingRecordId}
           loading={loading}
+          onDelete={handleDeleteAnnualRecord}
           onDuplicate={async (recordId, newYear) => {
             if (!user) {
               setError("Sua sessao expirou. Entre novamente.");
@@ -191,8 +228,10 @@ export default function ClientDetailsPage() {
 
             try {
               setDuplicatingRecordId(recordId);
+              setSuccess(null);
               await duplicateAnnualRecord(params.clientId, recordId, newYear, user.uid);
               setError(null);
+              setSuccess(`Exercicio ${newYear} criado com sucesso a partir da duplicacao.`);
               await refresh();
             } catch (duplicateError) {
               setError(
@@ -204,7 +243,6 @@ export default function ClientDetailsPage() {
               setDuplicatingRecordId(null);
             }
           }}
-          onDelete={handleDeleteAnnualRecord}
           duplicatingRecordId={duplicatingRecordId}
           records={records}
         />

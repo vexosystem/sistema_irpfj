@@ -24,14 +24,31 @@ type DeleteClientPayload = {
 
 type DeleteClientResponse = {
   deleted: boolean;
+  deletedAnnualRecords: number;
+  deletedCredentials: number;
 };
 
 function clientsCollection() {
   return collection(db, "clients");
 }
 
+function clientDocument(clientId: string) {
+  return doc(db, "clients", clientId);
+}
+
 function annualRecordsCollection(clientId: string) {
   return collection(db, "clients", clientId, "annualRecords");
+}
+
+async function callDeleteClient(
+  payload: DeleteClientPayload,
+): Promise<HttpsCallableResult<DeleteClientResponse>> {
+  const deleteClientCallable = httpsCallable<DeleteClientPayload, DeleteClientResponse>(
+    functions,
+    "deleteClient",
+  );
+
+  return deleteClientCallable(payload);
 }
 
 function mapClient(snapshot: Awaited<ReturnType<typeof getDoc>>) {
@@ -52,17 +69,6 @@ function mapClient(snapshot: Awaited<ReturnType<typeof getDoc>>) {
   } satisfies Client;
 }
 
-async function callDeleteClient(
-  payload: DeleteClientPayload,
-): Promise<HttpsCallableResult<DeleteClientResponse>> {
-  const deleteClientCallable = httpsCallable<DeleteClientPayload, DeleteClientResponse>(
-    functions,
-    "deleteClient",
-  );
-
-  return deleteClientCallable(payload);
-}
-
 export async function listClients() {
   try {
     const snapshot = await getDocs(query(clientsCollection(), orderBy("fullName")));
@@ -74,7 +80,7 @@ export async function listClients() {
 
 export async function getClient(clientId: string) {
   try {
-    const snapshot = await getDoc(doc(db, "clients", clientId));
+    const snapshot = await getDoc(clientDocument(clientId));
     if (!snapshot.exists()) {
       return null;
     }
@@ -166,7 +172,7 @@ export async function updateClient(clientId: string, values: ClientFormValues, a
       throw new Error("CPF ja cadastrado.");
     }
 
-    await updateDoc(doc(db, "clients", clientId), {
+    await updateDoc(clientDocument(clientId), {
       fullName: values.fullName,
       cpf: cpfDigits,
       cpfDigits,

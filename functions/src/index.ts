@@ -8,7 +8,6 @@ initializeApp();
 
 const db = getFirestore();
 const encryptionSecret = defineSecret("GOV_CREDENTIAL_ENCRYPTION_KEY");
-const allowedOrigins = ["http://localhost:3000", "https://sistema-irpfj.vercel.app"];
 
 type SaveGovCredentialInput = {
   clientId: string;
@@ -187,38 +186,151 @@ async function deleteCredentialIfExists(credentialId: string | undefined): Promi
   await db.collection("govCredentials").doc(credentialId).delete();
 }
 
-async function deleteAnnualRecordCascade(clientId: string, recordId: string, actorUid: string): Promise<void> {
-  const recordRef = db.collection("clients").doc(clientId).collection("annualRecords").doc(recordId);
+async function deleteAnnualRecordCascade(
+  actorUid: string,
+  clientId: string,
+  recordId: string,
+): Promise<{ deletedCredentialId: string | null; year: number | null }> {
+  const recordRef = db
+    .collection("clients")
+    .doc(clientId)
+    .collection("annualRecords")
+    .doc(recordId);
   const recordSnapshot = await recordRef.get();
 
   if (!recordSnapshot.exists) {
     throw new HttpsError("not-found", "Annual record not found.");
   }
 
-  const govCredentialRef = recordSnapshot.get("govCredentialRef");
+  const credentialId = recordSnapshot.get("govCredentialRef");
+  const yearValue = recordSnapshot.get("year");
+  const deletedCredentialId = isNonEmptyString(credentialId) ? credentialId : null;
+  const year = typeof yearValue === "number" ? yearValue : null;
+  const auditLogRef = db.collection("auditLogs").doc();
+  const batch = db.batch();
 
-  await deleteCredentialIfExists(isNonEmptyString(govCredentialRef) ? govCredentialRef : undefined);
-  await recordRef.delete();
+  batch.delete(recordRef);
 
-  await db.collection("auditLogs").add({
+  if (deletedCredentialId) {
+    batch.delete(db.collection("govCredentials").doc(deletedCredentialId));
+  }
+
+  batch.set(auditLogRef, {
     action: "delete_annual_record",
     entity: "annualRecord",
     entityId: recordId,
     before: {
       clientId,
       recordId,
-      govCredentialRef: isNonEmptyString(govCredentialRef) ? govCredentialRef : null,
+      year,
+      govCredentialRef: deletedCredentialId,
     },
     after: null,
     actorUid,
     timestamp: FieldValue.serverTimestamp(),
   });
+
+  await batch.commit();
+
+  return { deletedCredentialId, year };
+}
+
+async function deleteClientCascade(
+  actorUid: string,
+  clientId: string,
+): Promise<{ deletedAnnualRecords: number; deletedCredentials: number }> {
+  const clientRef = db.collection("clients").doc(clientId);
+  const clientSnapshot = await clientRef.get();
+
+  if (!clientSnapshot.exists) {
+    throw new HttpsError("not-found", "Client not found.");
+  }
+
+  const annualRecordsSnapshot = await clientRef.collection("annualRecords").get();
+  let deletedCredentials = 0;
+
+  const batches: Array<ReturnType<typeof db.batch>> = [];
+  let currentBatch = db.batch();
+  let currentWrites = 0;
+
+  const flushBatch = () => {
+    if (currentWrites === 0) {
+      return;
+    }
+
+    batches.push(currentBatch);
+    currentBatch = db.batch();
+    currentWrites = 0;
+  };
+
+  annualRecordsSnapshot.docs.forEach((recordSnapshot) => {
+    const credentialId = recordSnapshot.get("govCredentialRef");
+    const deletedCredentialId = isNonEmptyString(credentialId) ? credentialId : null;
+
+    currentBatch.delete(recordSnapshot.ref);
+    currentWrites += 1;
+
+    if (deletedCredentialId) {
+      currentBatch.delete(db.collection("govCredentials").doc(deletedCredentialId));
+      currentWrites += 1;
+      deletedCredentials += 1;
+    }
+
+    currentBatch.set(db.collection("auditLogs").doc(), {
+      action: "delete_annual_record",
+      entity: "annualRecord",
+      entityId: recordSnapshot.id,
+      before: {
+        clientId,
+        recordId: recordSnapshot.id,
+        year: recordSnapshot.get("year") ?? null,
+        govCredentialRef: deletedCredentialId,
+      },
+      after: null,
+      actorUid,
+      timestamp: FieldValue.serverTimestamp(),
+    });
+    currentWrites += 1;
+
+    if (currentWrites >= 430) {
+      flushBatch();
+    }
+  });
+
+  currentBatch.delete(clientRef);
+  currentWrites += 1;
+
+  currentBatch.set(db.collection("auditLogs").doc(), {
+    action: "delete_client",
+    entity: "client",
+    entityId: clientId,
+    before: {
+      clientId,
+      deletedAnnualRecords: annualRecordsSnapshot.size,
+      deletedCredentials,
+      fullName: clientSnapshot.get("fullName") ?? null,
+    },
+    after: null,
+    actorUid,
+    timestamp: FieldValue.serverTimestamp(),
+  });
+  currentWrites += 1;
+
+  flushBatch();
+
+  for (const batch of batches) {
+    await batch.commit();
+  }
+
+  return {
+    deletedAnnualRecords: annualRecordsSnapshot.size,
+    deletedCredentials,
+  };
 }
 
 const callableOptions = {
   region: "southamerica-east1" as const,
   secrets: [encryptionSecret],
-  cors: allowedOrigins,
 };
 
 export const saveGovCredential = onCall(callableOptions, async (request) => {
@@ -363,10 +475,13 @@ export const deleteAnnualRecord = onCall(callableOptions, async (request) => {
 
   await ensureOwner(request.auth.uid);
   const { clientId, recordId } = parseDeleteAnnualRecordInput(request.data);
+  const result = await deleteAnnualRecordCascade(request.auth.uid, clientId, recordId);
 
-  await deleteAnnualRecordCascade(clientId, recordId, request.auth.uid);
-
-  return { deleted: true };
+  return {
+    deleted: true,
+    deletedCredentialId: result.deletedCredentialId,
+    year: result.year,
+  };
 });
 
 export const deleteClient = onCall(callableOptions, async (request) => {
@@ -376,31 +491,11 @@ export const deleteClient = onCall(callableOptions, async (request) => {
 
   await ensureOwner(request.auth.uid);
   const { clientId } = parseDeleteClientInput(request.data);
+  const result = await deleteClientCascade(request.auth.uid, clientId);
 
-  const clientRef = db.collection("clients").doc(clientId);
-  const clientSnapshot = await clientRef.get();
-
-  if (!clientSnapshot.exists) {
-    throw new HttpsError("not-found", "Client not found.");
-  }
-
-  const annualRecordsSnapshot = await clientRef.collection("annualRecords").get();
-
-  for (const recordDoc of annualRecordsSnapshot.docs) {
-    await deleteAnnualRecordCascade(clientId, recordDoc.id, request.auth.uid);
-  }
-
-  await clientRef.delete();
-
-  await db.collection("auditLogs").add({
-    action: "delete_client",
-    entity: "client",
-    entityId: clientId,
-    before: { clientId, annualRecordsDeleted: annualRecordsSnapshot.size },
-    after: null,
-    actorUid: request.auth.uid,
-    timestamp: FieldValue.serverTimestamp(),
-  });
-
-  return { deleted: true };
+  return {
+    deleted: true,
+    deletedAnnualRecords: result.deletedAnnualRecords,
+    deletedCredentials: result.deletedCredentials,
+  };
 });

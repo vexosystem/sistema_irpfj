@@ -97,16 +97,16 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">Exercicio anual</p>
           <h2 className="text-2xl font-bold text-foreground">
             {record ? `Editar exercicio ${record.year}` : "Novo exercicio"}
           </h2>
         </div>
 
-        <Link href={`/clients/${clientId}`}>
-          <Button type="button" variant="secondary">
+        <Link className="w-full sm:w-auto" href={`/clients/${clientId}`}>
+          <Button className="w-full sm:w-auto" type="button" variant="secondary">
             Voltar para clientes
           </Button>
         </Link>
@@ -145,7 +145,7 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
+            <label className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
               <Checkbox {...register("hasWithholding")} />
               Possui retencao
             </label>
@@ -169,7 +169,7 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
               <Input {...register("govLogin")} />
             </FormField>
 
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
+            <label className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
               <Checkbox {...register("updateGovPassword")} />
               Atualizar senha gov
             </label>
@@ -206,7 +206,7 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
           title="Pagamento"
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
+            <label className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
               <Checkbox {...register("servicePaid")} />
               Servico pago
             </label>
@@ -224,8 +224,9 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
 
         {error ? <Card className="border-danger/40 text-sm text-danger">{error}</Card> : null}
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <LoadingButton
+            className="w-full sm:w-auto"
             loading={isSubmitting}
             loadingText={record ? "Atualizando exercicio..." : "Criando exercicio..."}
             type="submit"
@@ -233,6 +234,7 @@ export function AnnualRecordForm({ clientId, record }: AnnualRecordFormProps) {
             {record ? "Salvar alteracoes" : "Criar exercicio"}
           </LoadingButton>
           <Button
+            className="w-full sm:w-auto"
             disabled={isSubmitting}
             onClick={() => router.push(`/clients/${clientId}`)}
             type="button"

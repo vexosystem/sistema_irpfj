@@ -112,7 +112,7 @@ export function ClientForm({ client }: ClientFormProps) {
               <Input {...register("email")} />
             </FormField>
 
-            <label className="flex items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
+            <label className="flex min-h-[52px] items-center gap-3 rounded-2xl border border-border bg-surface-strong px-4 py-3 text-sm text-foreground">
               <Checkbox {...register("isActive")} />
               Cliente ativo
             </label>
@@ -128,15 +128,22 @@ export function ClientForm({ client }: ClientFormProps) {
 
           {error ? <div className="text-sm text-danger">{error}</div> : null}
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <LoadingButton
+              className="w-full sm:w-auto"
               loading={isSubmitting}
               loadingText={client ? "Atualizando cliente..." : "Salvando cliente..."}
               type="submit"
             >
               Salvar cliente
             </LoadingButton>
-            <Button disabled={isSubmitting} onClick={() => router.push("/clients")} type="button" variant="secondary">
+            <Button
+              className="w-full sm:w-auto"
+              disabled={isSubmitting}
+              onClick={() => router.push("/clients")}
+              type="button"
+              variant="secondary"
+            >
               Cancelar
             </Button>
           </div>

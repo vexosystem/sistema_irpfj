@@ -38,8 +38,8 @@ export default function EditAnnualRecordPage() {
     <AuthGuard>
       <AppShell
         actions={
-          <Link href={`/clients/${params.clientId}`}>
-            <Button type="button" variant="secondary">
+          <Link className="w-full sm:w-auto" href={`/clients/${params.clientId}`}>
+            <Button className="w-full sm:w-auto" type="button" variant="secondary">
               Voltar para clientes
             </Button>
           </Link>
